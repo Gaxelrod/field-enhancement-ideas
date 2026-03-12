@@ -22,11 +22,16 @@ function debounce<T extends (...args: any[]) => void>(fn: T, ms: number) {
   };
 }
 
-export function AddressFieldPreview({ props }: { props: AddressFieldProps }) {
+export function AddressFieldPreview({ props, onStateChange }: { props: AddressFieldProps; onStateChange?: (state: string) => void }) {
   const [street, setStreet] = useState('');
   const [city, setCity] = useState('');
-  const [state, setState] = useState('');
+  const [state, _setState] = useState('');
   const [zip, setZip] = useState('');
+
+  const setState = (val: string) => {
+    _setState(val);
+    onStateChange?.(val);
+  };
 
   const [suggestions, setSuggestions] = useState<AwsSuggestion[]>([]);
   const [loading, setLoading] = useState(false);
