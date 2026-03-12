@@ -35,6 +35,7 @@ export function AddressFieldPreview({ props }: { props: AddressFieldProps }) {
   const justSelected = useRef(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const userLocation = useRef<[number, number] | null>(null);
+  const userRegion = useRef<string | null>(null);
 
   // Get approximate location from IP (silent, no prompt)
   useEffect(() => {
@@ -43,7 +44,8 @@ export function AddressFieldPreview({ props }: { props: AddressFieldProps }) {
       .then(data => {
         if (data.latitude && data.longitude) {
           userLocation.current = [data.longitude, data.latitude];
-          console.log('IP location bias:', data.city, data.region, userLocation.current);
+          userRegion.current = data.region_code || data.region || null;
+          console.log('IP location bias:', data.city, data.region, data.region_code, userLocation.current);
         }
       })
       .catch(() => {});
@@ -54,24 +56,54 @@ export function AddressFieldPreview({ props }: { props: AddressFieldProps }) {
       if (q.length < 3) { setSuggestions([]); return; }
       setLoading(true);
       try {
-        const body: Record<string, unknown> = {
-          QueryText: q,
-          Filter: { IncludeCountries: ['USA'] },
-          MaxResults: 5,
-        };
-        if (userLocation.current) {
-          body.BiasPosition = userLocation.current;
-        }
-        const res = await fetch(
-          `https://places.geo.${AWS_REGION}.amazonaws.com/v2/autocomplete?key=${API_KEY}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
+        const makeBody = (useCircle: boolean): Record<string, unknown> => {
+          const filter: Record<string, unknown> = {
+            IncludeCountries: ['USA'],
+          };
+          if (userLocation.current) {
+            if (useCircle) {
+              filter.Circle = { Center: userLocation.current, Radius: 150000 };
+            }
           }
+          const body: Record<string, unknown> = {
+            QueryText: q,
+            Filter: filter,
+            MaxResults: 5,
+          };
+          if (userLocation.current && !useCircle) {
+            body.BiasPosition = userLocation.current;
+          }
+          return body;
+        };
+
+        // Try circle filter first, fall back to bias if empty
+        let res = await fetch(
+          `https://places.geo.${AWS_REGION}.amazonaws.com/v2/autocomplete?key=${API_KEY}`,
+          { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(makeBody(true)) }
         );
-        const data = await res.json();
-        setSuggestions(data.ResultItems || []);
+        let data = await res.json();
+        let items = data.ResultItems || [];
+
+        if (items.length === 0 && userLocation.current) {
+          res = await fetch(
+            `https://places.geo.${AWS_REGION}.amazonaws.com/v2/autocomplete?key=${API_KEY}`,
+            { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(makeBody(false)) }
+          );
+          data = await res.json();
+          items = data.ResultItems || [];
+        }
+
+        // Sort: user's state first
+        if (userRegion.current) {
+          const region = userRegion.current.toUpperCase();
+          items.sort((a: AwsSuggestion, b: AwsSuggestion) => {
+            const aMatch = a.Title?.includes(`, ${region},`) || a.Address?.Label?.includes(`, ${region} `) ? 0 : 1;
+            const bMatch = b.Title?.includes(`, ${region},`) || b.Address?.Label?.includes(`, ${region} `) ? 0 : 1;
+            return aMatch - bMatch;
+          });
+        }
+
+        setSuggestions(items);
       } catch {
         setSuggestions([]);
       } finally {
