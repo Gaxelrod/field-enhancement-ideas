@@ -37,7 +37,9 @@ interface AwsSuggestion {
   };
   Highlights?: {
     Title?: SuggestHighlight[];
-    Address?: { Label?: SuggestHighlight[] };
+  };
+  Address?: {
+    Label?: string;
   };
 }
 
@@ -185,7 +187,7 @@ export function AddressFieldPreview({ props, onStateChange }: { props: AddressFi
     const label = suggestion.Address?.Label || suggestion.Title;
     const parts = label.split(',').map((s: string) => s.trim());
     // Remove "United States" if present
-    const filtered = parts.filter(p => p !== 'United States');
+    const filtered = parts.filter((p: string) => p !== 'United States');
     if (filtered.length >= 3) {
       // Format: "Street, City, ST ZIP" or "ZIP, City, ST"
       const lastPart = filtered[filtered.length - 1];
