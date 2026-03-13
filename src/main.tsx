@@ -5,6 +5,8 @@ import './index.css'
 import App from './App.tsx'
 import { AddressPrototype } from './pages/AddressPrototype.tsx'
 import { EmployerPrototype } from './pages/EmployerPrototype.tsx'
+import { StoreLocatorPrototype } from './pages/StoreLocatorPrototype.tsx'
+import { LoanRequestPrototype } from './pages/LoanRequestPrototype.tsx'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
@@ -13,6 +15,8 @@ createRoot(document.getElementById('root')!).render(
         <Route path="/" element={<App />} />
         <Route path="/address" element={<AddressPrototype />} />
         <Route path="/employer" element={<EmployerPrototype />} />
+        <Route path="/store-locator" element={<StoreLocatorPrototype />} />
+        <Route path="/loan-request" element={<LoanRequestPrototype />} />
       </Routes>
     </BrowserRouter>
   </StrictMode>,

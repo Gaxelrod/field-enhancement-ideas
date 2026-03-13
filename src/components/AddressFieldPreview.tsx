@@ -4,12 +4,40 @@ import type { AddressFieldProps } from '../addressTypes';
 const API_KEY = import.meta.env.VITE_AWS_LOCATION_API_KEY;
 const AWS_REGION = 'us-west-2';
 
+interface SuggestHighlight {
+  StartIndex: number;
+  EndIndex: number;
+  Value: string;
+}
+
 interface AwsSuggestion {
-  PlaceId: string;
+  PlaceId?: string;
   Title: string;
-  PlaceType: string;
-  Address?: {
-    Label?: string;
+  SuggestResultItemType: 'Place' | 'Query';
+  Place?: {
+    PlaceId: string;
+    PlaceType: string;
+    Address?: {
+      Label?: string;
+      AddressNumber?: string;
+      Street?: string;
+      Locality?: string;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      Region?: any;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      SubRegion?: any;
+      PostalCode?: string;
+    };
+    Position?: [number, number];
+    Distance?: number;
+  };
+  Query?: {
+    QueryId: string;
+    QueryType: string;
+  };
+  Highlights?: {
+    Title?: SuggestHighlight[];
+    Address?: { Label?: SuggestHighlight[] };
   };
 }
 
@@ -58,22 +86,19 @@ export function AddressFieldPreview({ props, onStateChange }: { props: AddressFi
 
   const search = useCallback(
     debounce(async (q: string) => {
-      if (q.length < 3) { setSuggestions([]); return; }
+      if (q.length < 2) { setSuggestions([]); return; }
       setLoading(true);
       try {
         const makeBody = (useCircle: boolean): Record<string, unknown> => {
           const filter: Record<string, unknown> = {
             IncludeCountries: ['USA'],
           };
-          if (userLocation.current) {
-            if (useCircle) {
-              filter.Circle = { Center: userLocation.current, Radius: 150000 };
-            }
+          if (userLocation.current && useCircle) {
+            filter.Circle = { Center: userLocation.current, Radius: 150000 };
           }
           const body: Record<string, unknown> = {
             QueryText: q,
             Filter: filter,
-            MaxResults: 5,
           };
           if (userLocation.current && !useCircle) {
             body.BiasPosition = userLocation.current;
@@ -87,7 +112,7 @@ export function AddressFieldPreview({ props, onStateChange }: { props: AddressFi
           { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(makeBody(true)) }
         );
         let data = await res.json();
-        let items = data.ResultItems || [];
+        let items: AwsSuggestion[] = data.ResultItems || [];
 
         if (items.length === 0 && userLocation.current) {
           res = await fetch(
@@ -102,8 +127,10 @@ export function AddressFieldPreview({ props, onStateChange }: { props: AddressFi
         if (userRegion.current) {
           const region = userRegion.current.toUpperCase();
           items.sort((a: AwsSuggestion, b: AwsSuggestion) => {
-            const aMatch = a.Title?.includes(`, ${region},`) || a.Address?.Label?.includes(`, ${region} `) ? 0 : 1;
-            const bMatch = b.Title?.includes(`, ${region},`) || b.Address?.Label?.includes(`, ${region} `) ? 0 : 1;
+            const aLabel = a.Place?.Address?.Label || a.Title || '';
+            const bLabel = b.Place?.Address?.Label || b.Title || '';
+            const aMatch = aLabel.includes(`, ${region},`) || aLabel.includes(`, ${region} `) ? 0 : 1;
+            const bMatch = bLabel.includes(`, ${region},`) || bLabel.includes(`, ${region} `) ? 0 : 1;
             return aMatch - bMatch;
           });
         }
@@ -114,7 +141,7 @@ export function AddressFieldPreview({ props, onStateChange }: { props: AddressFi
       } finally {
         setLoading(false);
       }
-    }, 300),
+    }, 200),
     []
   );
 
@@ -131,19 +158,21 @@ export function AddressFieldPreview({ props, onStateChange }: { props: AddressFi
     setSuggestions([]);
     setSelected(true);
 
-    // Fetch full place details
-    if (suggestion.PlaceId) {
+    // Fetch full place details via GetPlace
+    const placeId = suggestion.PlaceId || suggestion.Place?.PlaceId;
+    if (placeId) {
       try {
         const res = await fetch(
-          `https://places.geo.${AWS_REGION}.amazonaws.com/v2/get-place/${suggestion.PlaceId}?key=${API_KEY}&language=en`,
+          `https://places.geo.${AWS_REGION}.amazonaws.com/v2/get-place/${placeId}?key=${API_KEY}&language=en`,
         );
         const data = await res.json();
         console.log('GetPlace response:', data);
         const addr = data.Address;
-        if (addr) {
+        // Only use structured fields if they actually exist (not just Label)
+        if (addr && (addr.Street || addr.Locality || addr.PostalCode)) {
           setStreet([addr.AddressNumber, addr.Street].filter(Boolean).join(' '));
           setCity(addr.Locality || addr.Municipality || '');
-          setState(addr.Region || addr.SubRegion || '');
+          setState(addr.Region?.Code || addr.Region?.Name || addr.SubRegion?.Name || '');
           setZip(addr.PostalCode || '');
           return;
         }
@@ -152,19 +181,35 @@ export function AddressFieldPreview({ props, onStateChange }: { props: AddressFi
       }
     }
 
-    // Fallback: parse from label
+    // Fallback: parse from Address.Label (format: "Street, City, ST ZIP, Country")
     const label = suggestion.Address?.Label || suggestion.Title;
-    const parts = label.split(',').map(s => s.trim());
-    if (parts.length >= 2) {
-      setStreet(parts[0] || '');
-      setCity(parts[1] || '');
-      if (parts.length >= 3) setState(parts[2] || '');
-      // Try to extract zip from state part like "MN 55344"
-      const stateZip = (parts[2] || '').match(/^([A-Z]{2})\s+(\d{5})/);
+    const parts = label.split(',').map((s: string) => s.trim());
+    // Remove "United States" if present
+    const filtered = parts.filter(p => p !== 'United States');
+    if (filtered.length >= 3) {
+      // Format: "Street, City, ST ZIP" or "ZIP, City, ST"
+      const lastPart = filtered[filtered.length - 1];
+      const stateZip = lastPart.match(/^([A-Z]{2})\s+(\d{5})/);
       if (stateZip) {
+        // "Street, City, ST ZIP"
+        setStreet(filtered.slice(0, -2).join(', '));
+        setCity(filtered[filtered.length - 2]);
         setState(stateZip[1]);
         setZip(stateZip[2]);
+      } else if (/^\d{5}$/.test(filtered[0])) {
+        // "ZIP, City, ST" (PostalCode format)
+        setZip(filtered[0]);
+        setCity(filtered[1] || '');
+        setState(filtered[2] || '');
+        setStreet('');
+      } else {
+        setStreet(filtered[0] || '');
+        setCity(filtered[1] || '');
+        setState(filtered[2] || '');
       }
+    } else if (filtered.length === 2) {
+      setStreet(filtered[0]);
+      setCity(filtered[1]);
     }
   };
 
@@ -242,23 +287,34 @@ export function AddressFieldPreview({ props, onStateChange }: { props: AddressFi
               marginTop: 4, overflow: 'hidden',
               boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
             }}>
-              {suggestions.map((r, i) => (
-                <div
-                  key={r.PlaceId}
-                  onMouseDown={e => { e.preventDefault(); handleSelect(r); }}
-                  style={{
-                    padding: '10px 12px', fontSize: 13, cursor: 'pointer',
-                    color: '#374151',
-                    borderBottom: i < suggestions.length - 1 ? '1px solid #f3f4f6' : 'none',
-                    display: 'flex', alignItems: 'flex-start', gap: 8,
-                  }}
-                  onMouseEnter={e => (e.currentTarget.style.background = '#f0f7ff')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                >
-                  <span style={{ color: '#9ca3af', flexShrink: 0, marginTop: 1 }}>📍</span>
-                  <span style={{ lineHeight: 1.4 }}>{r.Address?.Label || r.Title}</span>
-                </div>
-              ))}
+              {suggestions.map((r, i) => {
+                const label = r.Address?.Label || r.Title || '';
+                const parts = label.split(',').map((s: string) => s.trim());
+                const mainText = parts[0] || '';
+                const secondaryText = parts.slice(1).join(', ');
+                return (
+                  <div
+                    key={r.PlaceId || i}
+                    onMouseDown={e => { e.preventDefault(); handleSelect(r); }}
+                    style={{
+                      padding: '10px 12px', fontSize: 13, cursor: 'pointer',
+                      color: '#374151',
+                      borderBottom: i < suggestions.length - 1 ? '1px solid #f3f4f6' : 'none',
+                      display: 'flex', alignItems: 'flex-start', gap: 8,
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = '#f0f7ff')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <span style={{ color: '#9ca3af', flexShrink: 0, marginTop: 1 }}>📍</span>
+                    <div style={{ lineHeight: 1.4 }}>
+                      <div style={{ fontWeight: 500, color: '#111827' }}>{mainText}</div>
+                      {secondaryText && (
+                        <div style={{ fontSize: 12, color: '#6b7280', marginTop: 1 }}>{secondaryText}</div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
