@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 
 const MIN = 500;
 const MAX = 5000;
@@ -17,7 +17,19 @@ export function LoanRequestPrototype() {
   const [amount, setAmount] = useState(2000);
   const [inputValue, setInputValue] = useState('2,000');
   const [dragging, setDragging] = useState(false);
+  const [showHigherModal, setShowHigherModal] = useState(false);
+  const [higherAmount, setHigherAmount] = useState('');
   const sliderRef = useRef<HTMLDivElement>(null);
+
+  const handleHigherAmountChange = (raw: string) => {
+    const digits = raw.replace(/[^\d]/g, '');
+    if (digits === '') { setHigherAmount(''); return; }
+    setHigherAmount(parseInt(digits, 10).toLocaleString('en-US'));
+  };
+
+  const closeModal = useCallback((e: React.MouseEvent) => {
+    if (e.target === e.currentTarget) setShowHigherModal(false);
+  }, []);
 
   const percentage = ((amount - MIN) / (MAX - MIN)) * 100;
 
@@ -125,7 +137,7 @@ export function LoanRequestPrototype() {
           margin: '0 0 4px',
           lineHeight: 1.3,
         }}>
-          How much do you need?
+          Get your funds as soon as tomorrow
         </h1>
         <p style={{
           fontSize: 14,
@@ -133,7 +145,7 @@ export function LoanRequestPrototype() {
           textAlign: 'center',
           margin: '0 0 32px',
         }}>
-          Choose an amount between $500 and $5,000
+          Quick and easy — just pick an amount to get started
         </p>
 
         {/* Amount display + input */}
@@ -267,7 +279,7 @@ export function LoanRequestPrototype() {
 
         {/* Higher amount callout */}
         <div
-          onClick={() => {}}
+          onClick={() => setShowHigherModal(true)}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -334,21 +346,21 @@ export function LoanRequestPrototype() {
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748b' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              <polyline points="20 6 9 17 4 12"/>
             </svg>
-            256-bit SSL encrypted
+            No lengthy paperwork
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748b' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>
-            No impact to credit score
+            Takes about 2 minutes
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#64748b' }}>
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+              <path d="M13 2L3 14h9l-1 10 10-12h-9l1-10z"/>
             </svg>
-            2-minute application
+            Funds as fast as next day
           </div>
         </div>
       </div>
@@ -368,6 +380,159 @@ export function LoanRequestPrototype() {
           Disclosures
         </a>
       </div>
+
+      {/* Higher Amount Modal */}
+      {showHigherModal && (
+        <div
+          onClick={closeModal}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.5)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 50,
+            padding: 16,
+          }}
+        >
+          <div style={{
+            background: '#fff',
+            borderRadius: 20,
+            padding: '32px 28px',
+            width: '100%',
+            maxWidth: 440,
+            boxShadow: '0 25px 80px rgba(0,0,0,0.3)',
+            position: 'relative',
+          }}>
+            {/* Close button */}
+            <button
+              onClick={() => setShowHigherModal(false)}
+              style={{
+                position: 'absolute',
+                top: 16,
+                right: 16,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                color: '#94a3b8',
+                fontSize: 20,
+                lineHeight: 1,
+                padding: 4,
+              }}
+            >
+              &times;
+            </button>
+
+            {/* Icon */}
+            <div style={{
+              width: 48,
+              height: 48,
+              borderRadius: 12,
+              background: 'linear-gradient(135deg, #3b82f6, #6366f1)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: 20,
+            }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+
+            <h2 style={{ fontSize: 22, fontWeight: 700, color: '#0f172a', margin: '0 0 6px' }}>
+              Extended Loan Program
+            </h2>
+            <p style={{ fontSize: 14, color: '#64748b', margin: '0 0 24px', lineHeight: 1.5 }}>
+              Request between $5,000 and $35,000 with competitive rates and flexible repayment terms.
+            </p>
+
+            {/* Amount input */}
+            <label style={{ display: 'block', fontSize: 13, fontWeight: 500, color: '#374151', marginBottom: 6 }}>
+              How much do you need?
+            </label>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              background: '#f8fafc',
+              border: '2px solid #e2e8f0',
+              borderRadius: 12,
+              padding: '12px 16px',
+              marginBottom: 16,
+            }}>
+              <span style={{ fontSize: 20, fontWeight: 300, color: '#94a3b8', marginRight: 4 }}>$</span>
+              <input
+                type="text"
+                value={higherAmount}
+                onChange={e => handleHigherAmountChange(e.target.value)}
+                placeholder="5,000 - 35,000"
+                style={{
+                  fontSize: 20,
+                  fontWeight: 600,
+                  color: '#0f172a',
+                  border: 'none',
+                  background: 'transparent',
+                  outline: 'none',
+                  width: '100%',
+                  fontFamily: 'inherit',
+                }}
+              />
+            </div>
+
+            {/* Quick amounts */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 24, flexWrap: 'wrap' }}>
+              {[5000, 10000, 15000, 25000, 35000].map(amt => {
+                const isSelected = higherAmount === amt.toLocaleString('en-US');
+                return (
+                  <button
+                    key={amt}
+                    onClick={() => setHigherAmount(amt.toLocaleString('en-US'))}
+                    style={{
+                      flex: '1 1 auto',
+                      padding: '8px 12px',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: isSelected ? '#fff' : '#374151',
+                      background: isSelected ? 'linear-gradient(135deg, #3b82f6, #6366f1)' : '#f1f5f9',
+                      border: isSelected ? 'none' : '1px solid #e2e8f0',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    ${amt >= 1000 ? `${amt / 1000}K` : amt}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Submit */}
+            <button
+              disabled={!higherAmount}
+              style={{
+                width: '100%',
+                padding: '14px',
+                fontSize: 16,
+                fontWeight: 700,
+                color: '#fff',
+                background: higherAmount ? 'linear-gradient(135deg, #3b82f6, #6366f1)' : '#94a3b8',
+                border: 'none',
+                borderRadius: 12,
+                cursor: higherAmount ? 'pointer' : 'not-allowed',
+                boxShadow: higherAmount ? '0 4px 20px rgba(99,102,241,0.4)' : 'none',
+                transition: 'all 0.2s',
+              }}
+            >
+              Continue with ${higherAmount || '...'}
+            </button>
+
+            <p style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 12, margin: '12px 0 0' }}>
+              Same fast process. Results in minutes.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
